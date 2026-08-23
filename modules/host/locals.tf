@@ -19,6 +19,7 @@ locals {
     "${path.module}/templates/cloudinit.yaml.tpl",
     {
       hostname                     = local.name
+      preserve_hostname            = trimspace(var.name_override) == ""
       dns_servers                  = var.dns_servers
       has_dns_servers              = local.has_dns_servers
       sshAuthorizedKeysYaml        = yamlencode(local.ssh_authorized_keys)

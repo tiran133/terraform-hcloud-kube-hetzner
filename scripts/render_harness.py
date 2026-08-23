@@ -409,6 +409,7 @@ def assert_rebuild_cloudinit_contract() -> None:
 
     required_local_fragments = (
         "cloudinit_content=templatefile(",
+        'preserve_hostname=trimspace(var.name_override)==""',
         "rebuild_user_data_base64=base64encode(data.cloudinit_config.rebuild_config.rendered)",
         'rebuild_user_data_bytes=length(local.rebuild_user_data_base64)*3/4-length(regexall("=",local.rebuild_user_data_base64))',
     )
@@ -611,6 +612,7 @@ def base_render_vars() -> dict[str, Any]:
         "has_dns_servers": True,
         "hcloud_token": "render-token",
         "hostname": "render-node-0",
+        "preserve_hostname": True,
         "install_k8s_agent_script": "#!/bin/bash\nset -e\necho install agent\n",
         "k3s_config": "server: https://10.0.0.10:6443\n",
         "kubernetes_api_port": 6443,
@@ -1363,6 +1365,40 @@ def run_cloudinit_checks(scratch: TerraformScratch) -> None:
             str(template_path.relative_to(REPO_ROOT)),
             "authorized key list decodes to the expected single-line key",
         )
+
+        if template_path == REPO_ROOT / "modules/host/templates/cloudinit.yaml.tpl":
+            if document.get("preserve_hostname") is not True:
+                fail(
+                    "host cloud-init default hostname contract",
+                    "nodes without a name override must preserve their hostname",
+                )
+            print_pass(
+                "host cloud-init default hostname contract",
+                "nodes without a name override retain preserve_hostname=true",
+            )
+
+    renamed_hostname = "unitystack-prod-cluster-media-ccx23-nbg1-gva"
+    renamed_vars = base_render_vars()
+    renamed_vars["hostname"] = renamed_hostname
+    renamed_vars["preserve_hostname"] = False
+    _, renamed_document = render_cloudinit_with_vars(
+        renamed_vars,
+        REPO_ROOT / "modules/host/templates/cloudinit.yaml.tpl",
+    )
+    if renamed_document.get("hostname") != renamed_hostname:
+        fail(
+            "host cloud-init renamed hostname contract",
+            f"rendered hostname was {renamed_document.get('hostname')!r}",
+        )
+    if renamed_document.get("preserve_hostname") is not False:
+        fail(
+            "host cloud-init renamed hostname contract",
+            "renamed nodes must render preserve_hostname=false",
+        )
+    print_pass(
+        "host cloud-init renamed hostname contract",
+        "renamed nodes persist the complete overridden hostname",
+    )
 
 
 def node_annotation_write_files(scratch: TerraformScratch) -> list[dict[str, str]]:

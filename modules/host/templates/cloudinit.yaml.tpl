@@ -113,7 +113,7 @@ growpart:
 
 # Make sure the hostname is set correctly
 hostname: ${hostname}
-preserve_hostname: true
+preserve_hostname: ${preserve_hostname}
 
 bootcmd:
   # Leap Micro/MicroOS health-checker can form a systemd ordering cycle with
