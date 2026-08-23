@@ -357,6 +357,51 @@ def assert_opensuse_ssh_cloudinit_contract() -> None:
     )
 
 
+def assert_rebuild_cloudinit_contract() -> None:
+    """Keep object-preserving HCloud rebuild user-data directly consumable."""
+
+    main_source = normalize_hcl(
+        (REPO_ROOT / "modules/host/main.tf").read_text(encoding="utf-8")
+    )
+    output_source = normalize_hcl(
+        (REPO_ROOT / "modules/host/out.tf").read_text(encoding="utf-8")
+    )
+    locals_source = normalize_hcl(
+        (REPO_ROOT / "modules/host/locals.tf").read_text(encoding="utf-8")
+    )
+
+    required_main_fragments = (
+        'data"cloudinit_config""config"{gzip=truebase64_encode=true',
+        'data"cloudinit_config""rebuild_config"{gzip=falsebase64_encode=false',
+        "content=local.cloudinit_content",
+        "length(data.cloudinit_config.rebuild_config.rendered)<=32768",
+    )
+    missing_main = [fragment for fragment in required_main_fragments if fragment not in main_source]
+    if missing_main:
+        fail("HCloud rebuild cloud-init contract", f"missing main.tf fragments: {missing_main!r}")
+
+    if "cloudinit_content=templatefile(" not in locals_source:
+        fail("HCloud rebuild cloud-init contract", "creation and rebuild paths must share one rendered template")
+
+    required_output_fragments = (
+        'user_data_format="plain-mime"',
+        "user_data_bytes=length(data.cloudinit_config.rebuild_config.rendered)",
+        "user_data_sha256=sha256(data.cloudinit_config.rebuild_config.rendered)",
+        "user_data=data.cloudinit_config.rebuild_config.rendered",
+    )
+    missing_output = [fragment for fragment in required_output_fragments if fragment not in output_source]
+    if missing_output:
+        fail("HCloud rebuild cloud-init contract", f"missing out.tf fragments: {missing_output!r}")
+
+    if "user_data=data.cloudinit_config.config.rendered" in output_source:
+        fail("HCloud rebuild cloud-init contract", "rebuild artifact still exposes encoded creation user-data")
+
+    print_pass(
+        "HCloud rebuild cloud-init contract",
+        "creation stays base64+gzip while rebuild emits size-checked plain MIME with integrity metadata",
+    )
+
+
 def assert_baked_selinux_package_contract() -> None:
     """Keep distro installers from fetching SELinux RPMs during node bootstrap."""
 
@@ -1754,6 +1799,7 @@ def main() -> int:
         assert_agent_private_ipv4_contract(scratch)
         assert_agent_extra_firewall_ids_contract()
         assert_opensuse_ssh_cloudinit_contract()
+        assert_rebuild_cloudinit_contract()
         assert_baked_selinux_package_contract()
         assert_kubernetes_artifact_architecture_contract()
         run_helm_checks(scratch)

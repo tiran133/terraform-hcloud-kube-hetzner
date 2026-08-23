@@ -15,6 +15,26 @@ locals {
   # check if the user has set dns servers
   has_dns_servers = length(var.dns_servers) > 0
 
+  cloudinit_content = templatefile(
+    "${path.module}/templates/cloudinit.yaml.tpl",
+    {
+      hostname                     = local.name
+      dns_servers                  = var.dns_servers
+      has_dns_servers              = local.has_dns_servers
+      sshAuthorizedKeysYaml        = yamlencode(local.ssh_authorized_keys)
+      cloudinit_write_files_common = var.cloudinit_write_files_common
+      cloudinit_runcmd_common      = var.cloudinit_runcmd_common
+      cloudinit_write_files_extra  = var.cloudinit_write_files_extra
+      cloudinit_runcmd_extra       = var.cloudinit_runcmd_extra
+      swap_size                    = var.swap_size
+      os                           = var.os
+      private_ipv4_default_route   = var.disable_ipv4
+      public_ipv4_default_route    = !var.disable_ipv4
+      public_ipv6_default_route    = !var.disable_ipv6
+      network_gw_ipv4              = var.network_gw_ipv4
+    }
+  )
+
   effective_firewall_ids = var.firewall_ids == null ? toset(var.extra_firewall_ids) : setunion(var.firewall_ids, toset(var.extra_firewall_ids))
   extra_network_ids = toset([
     for network_id in var.extra_network_ids : network_id

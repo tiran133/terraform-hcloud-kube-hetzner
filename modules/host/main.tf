@@ -396,25 +396,29 @@ data "cloudinit_config" "config" {
   part {
     filename     = "init.cfg"
     content_type = "text/cloud-config"
-    content = templatefile(
-      "${path.module}/templates/cloudinit.yaml.tpl",
-      {
-        hostname                     = local.name
-        dns_servers                  = var.dns_servers
-        has_dns_servers              = local.has_dns_servers
-        sshAuthorizedKeysYaml        = yamlencode(local.ssh_authorized_keys)
-        cloudinit_write_files_common = var.cloudinit_write_files_common
-        cloudinit_runcmd_common      = var.cloudinit_runcmd_common
-        cloudinit_write_files_extra  = var.cloudinit_write_files_extra
-        cloudinit_runcmd_extra       = var.cloudinit_runcmd_extra
-        swap_size                    = var.swap_size
-        os                           = var.os
-        private_ipv4_default_route   = var.disable_ipv4
-        public_ipv4_default_route    = !var.disable_ipv4
-        public_ipv6_default_route    = !var.disable_ipv6
-        network_gw_ipv4              = var.network_gw_ipv4
-      }
-    )
+    content      = local.cloudinit_content
+  }
+}
+
+# HCloud's rebuild endpoint accepts cloud-init user-data directly. Keep this
+# separate from the base64+gzip payload used during Terraform server creation;
+# passing that encoded creation payload to `hcloud server rebuild` can leave
+# only the metadata-injected, root-login redirect key in authorized_keys.
+data "cloudinit_config" "rebuild_config" {
+  gzip          = false
+  base64_encode = false
+
+  part {
+    filename     = "init.cfg"
+    content_type = "text/cloud-config"
+    content      = local.cloudinit_content
+  }
+}
+
+check "rebuild_user_data_size" {
+  assert {
+    condition     = var.rebuild_generation == 0 || length(data.cloudinit_config.rebuild_config.rendered) <= 32768
+    error_message = "Plain MIME rebuild user-data exceeds HCloud's 32 KiB user-data limit."
   }
 }
 
