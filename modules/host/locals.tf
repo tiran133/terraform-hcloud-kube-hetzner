@@ -35,6 +35,12 @@ locals {
     }
   )
 
+  # Terraform length(string) counts Unicode grapheme clusters, not serialized
+  # UTF-8 bytes. Derive the exact byte count from base64 length and padding so
+  # the HCloud user-data limit is enforced against the payload sent on the wire.
+  rebuild_user_data_base64 = base64encode(data.cloudinit_config.rebuild_config.rendered)
+  rebuild_user_data_bytes  = length(local.rebuild_user_data_base64) * 3 / 4 - length(regexall("=", local.rebuild_user_data_base64))
+
   effective_firewall_ids = var.firewall_ids == null ? toset(var.extra_firewall_ids) : setunion(var.firewall_ids, toset(var.extra_firewall_ids))
   extra_network_ids = toset([
     for network_id in var.extra_network_ids : network_id

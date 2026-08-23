@@ -33,7 +33,7 @@ output "rebuild_artifact" {
     os                  = var.os
     rebuild_generation  = var.rebuild_generation
     user_data_format    = "plain-mime"
-    user_data_bytes     = length(data.cloudinit_config.rebuild_config.rendered)
+    user_data_bytes     = local.rebuild_user_data_bytes
     user_data_sha256    = sha256(data.cloudinit_config.rebuild_config.rendered)
     user_data           = data.cloudinit_config.rebuild_config.rendered
   }

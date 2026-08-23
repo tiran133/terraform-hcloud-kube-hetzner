@@ -417,7 +417,7 @@ data "cloudinit_config" "rebuild_config" {
 
 check "rebuild_user_data_size" {
   assert {
-    condition     = var.rebuild_generation == 0 || length(data.cloudinit_config.rebuild_config.rendered) <= 32768
+    condition     = var.rebuild_generation == 0 || local.rebuild_user_data_bytes <= 32768
     error_message = "Plain MIME rebuild user-data exceeds HCloud's 32 KiB user-data limit."
   }
 }

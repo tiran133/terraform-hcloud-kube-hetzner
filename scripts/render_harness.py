@@ -374,18 +374,24 @@ def assert_rebuild_cloudinit_contract() -> None:
         'data"cloudinit_config""config"{gzip=truebase64_encode=true',
         'data"cloudinit_config""rebuild_config"{gzip=falsebase64_encode=false',
         "content=local.cloudinit_content",
-        "length(data.cloudinit_config.rebuild_config.rendered)<=32768",
+        "local.rebuild_user_data_bytes<=32768",
     )
     missing_main = [fragment for fragment in required_main_fragments if fragment not in main_source]
     if missing_main:
         fail("HCloud rebuild cloud-init contract", f"missing main.tf fragments: {missing_main!r}")
 
-    if "cloudinit_content=templatefile(" not in locals_source:
-        fail("HCloud rebuild cloud-init contract", "creation and rebuild paths must share one rendered template")
+    required_local_fragments = (
+        "cloudinit_content=templatefile(",
+        "rebuild_user_data_base64=base64encode(data.cloudinit_config.rebuild_config.rendered)",
+        'rebuild_user_data_bytes=length(local.rebuild_user_data_base64)*3/4-length(regexall("=",local.rebuild_user_data_base64))',
+    )
+    missing_locals = [fragment for fragment in required_local_fragments if fragment not in locals_source]
+    if missing_locals:
+        fail("HCloud rebuild cloud-init contract", f"missing locals.tf fragments: {missing_locals!r}")
 
     required_output_fragments = (
         'user_data_format="plain-mime"',
-        "user_data_bytes=length(data.cloudinit_config.rebuild_config.rendered)",
+        "user_data_bytes=local.rebuild_user_data_bytes",
         "user_data_sha256=sha256(data.cloudinit_config.rebuild_config.rendered)",
         "user_data=data.cloudinit_config.rebuild_config.rendered",
     )
