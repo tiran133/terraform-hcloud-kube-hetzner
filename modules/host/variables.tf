@@ -3,6 +3,31 @@ variable "name" {
   type        = string
 }
 
+variable "name_override" {
+  description = "Optional replacement base name for an existing server. The original name remains the random-suffix keeper so changing this value renames the server in place without rotating its suffix."
+  type        = string
+  default     = ""
+
+  validation {
+    condition = trimspace(var.name_override) == "" || (
+      length(trimspace(var.name_override)) <= (var.append_random_suffix ? 59 : 63) &&
+      can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", trimspace(var.name_override)))
+    )
+    error_message = "name_override must be empty or a lowercase DNS-style name that remains at most 63 characters after any random suffix is appended."
+  }
+}
+
+variable "rebuild_generation" {
+  description = "Operator-controlled generation used to replay host bootstrap provisioners after an out-of-band, object-preserving server rebuild. Increment only as part of a reviewed rebuild runbook."
+  type        = number
+  default     = 0
+
+  validation {
+    condition     = var.rebuild_generation >= 0 && var.rebuild_generation == floor(var.rebuild_generation)
+    error_message = "rebuild_generation must be a non-negative integer."
+  }
+}
+
 variable "append_random_suffix" {
   description = "Whether to append a random suffix to the server name."
   type        = bool
@@ -142,6 +167,18 @@ variable "server_type" {
 
 variable "backups" {
   description = "Enable automatic backups via Hetzner"
+  type        = bool
+  default     = false
+}
+
+variable "delete_protection" {
+  description = "Protect the server object from deletion in Hetzner Cloud."
+  type        = bool
+  default     = false
+}
+
+variable "rebuild_protection" {
+  description = "Protect the server object from additional rebuilds in Hetzner Cloud. Enable after the planned rebuild has completed."
   type        = bool
   default     = false
 }

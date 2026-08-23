@@ -7,8 +7,10 @@ locals {
   # For terraforms provisioner.connection.agent_identity, we need the public key as a string.
   ssh_agent_identity = var.ssh_private_key == null ? local.ssh_public_key : null
 
-  # the hosts name with its unique suffix attached
-  name = var.append_random_suffix ? "${var.name}-${random_string.server.id}" : var.name
+  # Keep var.name as the random_string keeper and allow an existing host to be
+  # renamed without rotating its suffix or changing its Terraform address.
+  base_name = trimspace(var.name_override) != "" ? trimspace(var.name_override) : var.name
+  name      = var.append_random_suffix ? "${local.base_name}-${random_string.server.id}" : local.base_name
 
   # check if the user has set dns servers
   has_dns_servers = length(var.dns_servers) > 0

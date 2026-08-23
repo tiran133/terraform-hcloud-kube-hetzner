@@ -40,7 +40,9 @@ module "agents" {
   for_each = local.agent_nodes
 
   name                          = "${var.use_cluster_name_in_node_name ? "${var.cluster_name}-" : ""}${each.value.nodepool_name}${try(each.value.node_name_suffix, "")}"
+  name_override                 = each.value.server_name_override
   append_random_suffix          = each.value.append_random_suffix
+  rebuild_generation            = each.value.rebuild_generation
   connection_host               = ""
   connection_host_suffix        = local.tailscale_pre_terraform_ssh_enabled ? local.tailscale_magicdns_domain : ""
   os_snapshot_id                = try(trimspace(each.value.os_snapshot_id), "") != "" ? trimspace(each.value.os_snapshot_id) : local.snapshot_id_by_os[each.value.os][substr(each.value.server_type, 0, 3) == "cax" ? "arm" : "x86"]
@@ -58,6 +60,8 @@ module "agents" {
   location                      = each.value.location
   server_type                   = each.value.server_type
   backups                       = each.value.backups
+  delete_protection             = each.value.delete_protection
+  rebuild_protection            = each.value.rebuild_protection
   ipv4_subnet_id                = local.use_per_nodepool_subnets ? hcloud_network_subnet.agent[[for i, v in var.agent_nodepools : i if v.name == each.value.nodepool_name][0]].id : hcloud_network_subnet.agent[0].id
   dns_servers                   = var.dns_servers
   registries_config             = local.registries_config_effective
@@ -234,10 +238,13 @@ locals {
 resource "terraform_data" "agent_config" {
   for_each = local.agent_nodes
 
-  triggers_replace = {
-    agent_id = module.agents[each.key].id
-    config   = local.kubernetes_distribution == "rke2" ? sha1(yamlencode(local.rke2-agent-config[each.key])) : sha1(yamlencode(local.k3s-agent-config[each.key]))
-  }
+  triggers_replace = merge(
+    {
+      agent_id = module.agents[each.key].id
+      config   = local.kubernetes_distribution == "rke2" ? sha1(yamlencode(local.rke2-agent-config[each.key])) : sha1(yamlencode(local.k3s-agent-config[each.key]))
+    },
+    each.value.rebuild_generation > 0 ? { rebuild_generation = tostring(each.value.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -275,9 +282,10 @@ moved {
 resource "terraform_data" "agents" {
   for_each = local.agent_nodes
 
-  triggers_replace = {
-    agent_id = module.agents[each.key].id
-  }
+  triggers_replace = merge(
+    { agent_id = module.agents[each.key].id },
+    each.value.rebuild_generation > 0 ? { rebuild_generation = tostring(each.value.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -373,13 +381,13 @@ resource "hcloud_volume" "longhorn_volume" {
 resource "terraform_data" "configure_longhorn_volume" {
   for_each = { for k, v in local.agent_nodes : k => v if((v.longhorn_volume_size >= 10) && (v.longhorn_volume_size <= 10240) && var.enable_longhorn) }
 
-  triggers_replace = {
+  triggers_replace = merge({
     agent_id             = module.agents[each.key].id
     longhorn_fstype      = var.longhorn_fstype
     longhorn_mount_path  = each.value.longhorn_mount_path
     longhorn_volume_size = hcloud_volume.longhorn_volume[each.key].size
     volume_id            = hcloud_volume.longhorn_volume[each.key].id
-  }
+  }, each.value.rebuild_generation > 0 ? { rebuild_generation = tostring(each.value.rebuild_generation) } : {})
 
   # Configure and resize the longhorn volume
   provisioner "remote-exec" {
@@ -480,14 +488,14 @@ resource "hcloud_volume" "attached_agent_volume" {
 resource "terraform_data" "configure_attached_agent_volume" {
   for_each = local.attached_agent_volumes
 
-  triggers_replace = {
+  triggers_replace = merge({
     agent_id    = module.agents[each.value.node_key].id
     volume_id   = hcloud_volume.attached_agent_volume[each.key].id
     volume_size = hcloud_volume.attached_agent_volume[each.key].size
     mount_path  = each.value.mount_path
     filesystem  = each.value.filesystem
     volume_name = hcloud_volume.attached_agent_volume[each.key].name
-  }
+  }, local.agent_nodes[each.value.node_key].rebuild_generation > 0 ? { rebuild_generation = tostring(local.agent_nodes[each.value.node_key].rebuild_generation) } : {})
 
   provisioner "remote-exec" {
     inline = [
@@ -600,10 +608,13 @@ resource "hcloud_rdns" "agents" {
 resource "terraform_data" "configure_floating_ip" {
   for_each = { for k, v in local.agent_nodes : k => v if coalesce(lookup(v, "floating_ip"), false) }
 
-  triggers_replace = {
-    agent_id       = module.agents[each.key].id
-    floating_ip_id = local.agent_floating_ip_id_by_node[each.key]
-  }
+  triggers_replace = merge(
+    {
+      agent_id       = module.agents[each.key].id
+      floating_ip_id = local.agent_floating_ip_id_by_node[each.key]
+    },
+    each.value.rebuild_generation > 0 ? { rebuild_generation = tostring(each.value.rebuild_generation) } : {},
+  )
 
   provisioner "remote-exec" {
     inline = [

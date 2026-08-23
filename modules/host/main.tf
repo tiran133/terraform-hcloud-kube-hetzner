@@ -29,6 +29,8 @@ resource "hcloud_server" "server" {
   firewall_ids       = local.effective_firewall_ids
   placement_group_id = var.placement_group_id
   backups            = var.backups
+  delete_protection  = var.delete_protection
+  rebuild_protection = var.rebuild_protection
   user_data          = data.cloudinit_config.config.rendered
   keep_disk          = var.keep_disk_size
   public_net {
@@ -71,9 +73,10 @@ resource "hcloud_server" "server" {
 }
 
 resource "terraform_data" "initial_readiness" {
-  triggers_replace = {
-    server_id = hcloud_server.server.id
-  }
+  triggers_replace = merge(
+    { server_id = hcloud_server.server.id },
+    var.rebuild_generation > 0 ? { rebuild_generation = tostring(var.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -132,10 +135,13 @@ resource "terraform_data" "initial_readiness" {
 }
 
 resource "terraform_data" "os_upgrade_timer" {
-  triggers_replace = {
-    server_id                = hcloud_server.server.id
-    automatically_upgrade_os = tostring(var.automatically_upgrade_os)
-  }
+  triggers_replace = merge(
+    {
+      server_id                = hcloud_server.server.id
+      automatically_upgrade_os = tostring(var.automatically_upgrade_os)
+    },
+    var.rebuild_generation > 0 ? { rebuild_generation = tostring(var.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -178,12 +184,15 @@ resource "hcloud_server_network" "extra_networks" {
 }
 
 resource "terraform_data" "ssh_authorized_keys" {
-  triggers_replace = {
-    server_id                     = hcloud_server.server.id
-    ssh_public_key                = sha1(var.ssh_public_key)
-    ssh_additional_keys           = sha1(join("\n", var.ssh_additional_public_keys))
-    ssh_authorized_keys_exclusive = tostring(var.ssh_authorized_keys_exclusive)
-  }
+  triggers_replace = merge(
+    {
+      server_id                     = hcloud_server.server.id
+      ssh_public_key                = sha1(var.ssh_public_key)
+      ssh_additional_keys           = sha1(join("\n", var.ssh_additional_public_keys))
+      ssh_authorized_keys_exclusive = tostring(var.ssh_authorized_keys_exclusive)
+    },
+    var.rebuild_generation > 0 ? { rebuild_generation = tostring(var.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -253,9 +262,10 @@ resource "terraform_data" "ssh_authorized_keys" {
 }
 
 resource "terraform_data" "registries" {
-  triggers_replace = {
-    registries = var.registries_config
-  }
+  triggers_replace = merge(
+    { registries = var.registries_config },
+    var.rebuild_generation > 0 ? { rebuild_generation = tostring(var.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -290,9 +300,10 @@ moved {
 resource "terraform_data" "kubelet_config" {
   count = var.kubelet_config != "" ? 1 : 0
 
-  triggers_replace = {
-    kubelet_config = var.kubelet_config
-  }
+  triggers_replace = merge(
+    { kubelet_config = var.kubelet_config },
+    var.rebuild_generation > 0 ? { rebuild_generation = tostring(var.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -326,9 +337,10 @@ moved {
 resource "terraform_data" "audit_policy" {
   count = var.audit_policy_config != "" ? 1 : 0
 
-  triggers_replace = {
-    audit_policy = var.audit_policy_config
-  }
+  triggers_replace = merge(
+    { audit_policy = var.audit_policy_config },
+    var.rebuild_generation > 0 ? { rebuild_generation = tostring(var.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -407,9 +419,10 @@ data "cloudinit_config" "config" {
 }
 
 resource "terraform_data" "zram" {
-  triggers_replace = {
-    zram_size = var.zram_size
-  }
+  triggers_replace = merge(
+    { zram_size = var.zram_size },
+    var.rebuild_generation > 0 ? { rebuild_generation = tostring(var.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"
@@ -498,10 +511,13 @@ moved {
 
 # Resource to toggle transactional-update.timer based on automatically_upgrade_os setting
 resource "terraform_data" "os_upgrade_toggle" {
-  triggers_replace = {
-    os_upgrade_state = var.automatically_upgrade_os ? "enabled" : "disabled"
-    server_id        = hcloud_server.server.id
-  }
+  triggers_replace = merge(
+    {
+      os_upgrade_state = var.automatically_upgrade_os ? "enabled" : "disabled"
+      server_id        = hcloud_server.server.id
+    },
+    var.rebuild_generation > 0 ? { rebuild_generation = tostring(var.rebuild_generation) } : {},
+  )
 
   connection {
     user           = "root"

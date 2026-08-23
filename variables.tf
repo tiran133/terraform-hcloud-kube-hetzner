@@ -1204,6 +1204,10 @@ variable "agent_nodepools" {
     longhorn_volume_size  = optional(number)
     longhorn_mount_path   = optional(string, "/var/longhorn")
     append_random_suffix  = optional(bool, true)
+    server_name_override  = optional(string, "")
+    rebuild_generation    = optional(number, 0)
+    delete_protection     = optional(bool, false)
+    rebuild_protection    = optional(bool, false)
     swap_size             = optional(string, "")
     zram_size             = optional(string, "")
     kubelet_args          = optional(list(string), ["kube-reserved=cpu=50m,memory=300Mi,ephemeral-storage=1Gi", "system-reserved=cpu=250m,memory=300Mi"])
@@ -1249,6 +1253,10 @@ variable "agent_nodepools" {
       longhorn_volume_size      = optional(number)
       longhorn_mount_path       = optional(string, null)
       append_random_suffix      = optional(bool)
+      server_name_override      = optional(string, null)
+      rebuild_generation        = optional(number, null)
+      delete_protection         = optional(bool, null)
+      rebuild_protection        = optional(bool, null)
       swap_size                 = optional(string, "")
       zram_size                 = optional(string, "")
       kubelet_args              = optional(list(string), ["kube-reserved=cpu=50m,memory=300Mi,ephemeral-storage=1Gi", "system-reserved=cpu=250m,memory=300Mi"])
@@ -1323,6 +1331,30 @@ variable "agent_nodepools" {
       can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", agent_nodepool.name))
     ])
     error_message = "Names in agent_nodepools must use lowercase alphanumeric characters and dashes, and must not start or end with a dash."
+  }
+
+  validation {
+    condition = alltrue([
+      for agent_nodepool in var.agent_nodepools :
+      (trimspace(agent_nodepool.server_name_override) == "" || can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", trimspace(agent_nodepool.server_name_override)))) &&
+      alltrue([
+        for _, agent_node in coalesce(agent_nodepool.nodes, {}) :
+        agent_node.server_name_override == null || trimspace(agent_node.server_name_override) == "" || can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?$", trimspace(agent_node.server_name_override)))
+      ])
+    ])
+    error_message = "agent_nodepools server_name_override values must be empty or lowercase DNS-style names."
+  }
+
+  validation {
+    condition = alltrue([
+      for agent_nodepool in var.agent_nodepools :
+      agent_nodepool.rebuild_generation >= 0 && agent_nodepool.rebuild_generation == floor(agent_nodepool.rebuild_generation) &&
+      alltrue([
+        for _, agent_node in coalesce(agent_nodepool.nodes, {}) :
+        agent_node.rebuild_generation == null || (agent_node.rebuild_generation >= 0 && agent_node.rebuild_generation == floor(agent_node.rebuild_generation))
+      ])
+    ])
+    error_message = "agent_nodepools rebuild_generation values must be non-negative integers."
   }
 
   validation {

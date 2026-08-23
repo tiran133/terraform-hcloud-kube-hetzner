@@ -23,6 +23,19 @@ output "id" {
   depends_on = [terraform_data.initial_readiness, terraform_data.os_upgrade_timer]
 }
 
+output "rebuild_artifact" {
+  description = "Sensitive object-preserving rebuild input. Extract only from a reviewed saved plan and store with mode 0600."
+  sensitive   = true
+  value = {
+    server_id           = hcloud_server.server.id
+    desired_server_name = local.name
+    image_id            = var.os_snapshot_id
+    os                  = var.os
+    rebuild_generation  = var.rebuild_generation
+    user_data           = data.cloudinit_config.config.rendered
+  }
+}
+
 output "domain_assignments" {
   description = "Assignment of domain to the primary IP of the server"
   value = [

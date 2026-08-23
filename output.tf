@@ -140,6 +140,14 @@ output "agents" {
   value       = module.agents
 }
 
+output "agent_rebuild_artifacts" {
+  description = "Sensitive object-preserving rebuild inputs keyed by the stable agent node identifier."
+  sensitive   = true
+  value = {
+    for key, agent in module.agents : key => agent.rebuild_artifact
+  }
+}
+
 output "domain_assignments" {
   description = "Assignments of domains to IPs based on reverse DNS"
   value = concat(
